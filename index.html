@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>御書印マップ</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #24312d;
+        --muted: #6a756f;
+        --paper: #fbfaf6;
+        --line: #d9ded7;
+        --accent: #c44d34;
+        --accent-dark: #8f3325;
+        --green: #477463;
+        --gold: #b8862b;
+        --shadow: 0 18px 60px rgba(36, 49, 45, .14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(196, 77, 52, .11), transparent 32rem),
+          linear-gradient(135deg, #f7f0e4 0%, #eef5ef 100%);
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      .app-shell {
+        width: min(1440px, 100%);
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        padding: 8px 4px 22px;
+      }
+
+      .eyebrow {
+        margin: 0 0 6px;
+        color: var(--accent-dark);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      h1,
+      h2,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 0;
+        font-size: clamp(34px, 5vw, 68px);
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .summary {
+        display: grid;
+        place-items: center;
+        min-width: 96px;
+        aspect-ratio: 1;
+        border: 1px solid rgba(196, 77, 52, .25);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, .74);
+        box-shadow: var(--shadow);
+      }
+
+      .summary span {
+        font-size: 32px;
+        font-weight: 900;
+        color: var(--accent);
+      }
+
+      .summary small {
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(340px, .65fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .map-panel,
+      .side-panel > section {
+        background: rgba(255, 255, 255, .82);
+        border: 1px solid rgba(217, 222, 215, .9);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      .map-panel {
+        min-height: calc(100vh - 140px);
+        overflow: hidden;
+      }
+
+      .map-toolbar {
+        display: flex;
+        gap: 14px;
+        align-items: end;
+        justify-content: space-between;
+        padding: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .search-field,
+      .note-field {
+        display: grid;
+        gap: 7px;
+        width: 100%;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .search-field input,
+      .note-field textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        color: var(--ink);
+        outline: none;
+      }
+
+      .search-field input {
+        height: 44px;
+        padding: 0 14px;
+      }
+
+      .note-field textarea {
+        resize: vertical;
+        min-height: 106px;
+        padding: 12px;
+      }
+
+      .search-field input:focus,
+      .note-field textarea:focus {
+        border-color: var(--green);
+        box-shadow: 0 0 0 3px rgba(71, 116, 99, .14);
+      }
+
+      .segmented {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(72px, 1fr));
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--paper);
+      }
+
+      .segment {
+        min-height: 42px;
+        border: 0;
+        border-right: 1px solid var(--line);
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .segment:last-child {
+        border-right: 0;
+      }
+
+      .segment.active {
+        background: var(--green);
+        color: white;
+      }
+
+      .map-wrap {
+        padding: 16px;
+      }
+
+      .japan-map {
+        display: block;
+        width: 100%;
+        max-height: calc(100vh - 220px);
+        min-height: 620px;
+      }
+
+      .real-map {
+        width: 100%;
+        height: calc(100vh - 220px);
+        min-height: 620px;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #dcefeb;
+      }
+
+      .leaflet-container {
+        font-family: inherit;
+      }
+
+      .shop-marker {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border: 3px solid white;
+        border-radius: 50% 50% 50% 0;
+        background: var(--accent);
+        color: white;
+        font-size: 13px;
+        font-weight: 900;
+        box-shadow: 0 8px 22px rgba(36, 49, 45, .28);
+        transform: rotate(-45deg);
+      }
+
+      .shop-marker span {
+        transform: rotate(45deg);
+      }
+
+      .shop-marker.visited {
+        background: var(--green);
+      }
+
+      .shop-marker.active {
+        outline: 4px solid rgba(184, 134, 43, .38);
+      }
+
+      .leaflet-popup-content {
+        margin: 12px 14px;
+        color: var(--ink);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .leaflet-popup-content strong {
+        display: block;
+        margin-bottom: 3px;
+        font-size: 15px;
+      }
+
+      .sea-line {
+        fill: #dcefeb;
+      }
+
+      .map-grid path {
+        fill: none;
+        stroke: rgba(71, 116, 99, .12);
+        stroke-width: 1;
+      }
+
+      .coastline {
+        filter: url(#shadow);
+      }
+
+      .land,
+      .island {
+        fill: url(#land);
+        stroke: #6c9b88;
+        stroke-linejoin: round;
+      }
+
+      .land {
+        stroke-width: 3;
+      }
+
+      .island {
+        stroke-width: 2.5;
+      }
+
+      .region-lines path {
+        fill: none;
+        stroke: rgba(71, 116, 99, .38);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-dasharray: 7 8;
+      }
+
+      .map-labels text {
+        fill: rgba(36, 49, 45, .58);
+        font-size: 15px;
+        font-weight: 900;
+        letter-spacing: 0;
+        paint-order: stroke;
+        stroke: rgba(246, 241, 232, .8);
+        stroke-width: 5;
+        stroke-linejoin: round;
+      }
+
+      .pin {
+        cursor: pointer;
+      }
+
+      .pin circle {
+        fill: white;
+        stroke: var(--accent);
+        stroke-width: 4;
+      }
+
+      .pin path {
+        fill: var(--accent);
+      }
+
+      .pin.visited circle {
+        stroke: var(--green);
+      }
+
+      .pin.visited path {
+        fill: var(--green);
+      }
+
+      .pin text {
+        fill: white;
+        font-size: 20px;
+        font-weight: 900;
+        text-anchor: middle;
+        dominant-baseline: middle;
+        pointer-events: none;
+      }
+
+      .pin.active circle {
+        stroke: var(--gold);
+        stroke-width: 6;
+      }
+
+      .side-panel {
+        display: grid;
+        gap: 20px;
+      }
+
+      .detail,
+      .list-section {
+        padding: 18px;
+      }
+
+      .detail h2 {
+        margin-bottom: 8px;
+        font-size: 25px;
+        line-height: 1.18;
+      }
+
+      .muted {
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin: 16px 0;
+      }
+
+      .meta-grid div {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+      }
+
+      .meta-grid span {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .meta-grid strong {
+        display: block;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .check-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin: 14px 0;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .check-row input {
+        width: 19px;
+        height: 19px;
+        accent-color: var(--green);
+      }
+
+      .section-heading {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .section-heading h2 {
+        margin: 0;
+        font-size: 21px;
+      }
+
+      .section-heading span {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .shop-list {
+        display: grid;
+        gap: 10px;
+        max-height: 46vh;
+        overflow: auto;
+        padding-right: 4px;
+      }
+
+      .shop-card {
+        display: grid;
+        gap: 6px;
+        width: 100%;
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        color: var(--ink);
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .shop-card.active {
+        border-color: var(--gold);
+        box-shadow: inset 0 0 0 2px rgba(184, 134, 43, .24);
+      }
+
+      .shop-card strong {
+        font-size: 16px;
+      }
+
+      .shop-card span {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .badge {
+        width: fit-content;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: rgba(196, 77, 52, .12);
+        color: var(--accent-dark);
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .badge.visited {
+        background: rgba(71, 116, 99, .14);
+        color: var(--green);
+      }
+
+      @media (max-width: 980px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .map-panel {
+          min-height: auto;
+        }
+
+        .japan-map,
+        .real-map {
+          min-height: 520px;
+        }
+
+        .shop-list {
+          max-height: none;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .app-shell {
+          padding: 14px;
+        }
+
+        .topbar {
+          align-items: stretch;
+        }
+
+        .summary {
+          min-width: 78px;
+        }
+
+        .map-toolbar {
+          display: grid;
+        }
+
+        .segmented {
+          grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        .segment {
+          min-width: 0;
+          padding: 0 8px;
+          font-size: 12px;
+        }
+
+        .detail,
+        .list-section,
+        .map-wrap,
+        .map-toolbar {
+          padding: 12px;
+        }
+
+        .japan-map,
+        .real-map {
+          min-height: 440px;
+          height: 62vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">GOSYOIN BOOKSTORE MAP</p>
+          <h1>御書印マップ</h1>
+        </div>
+        <div class="summary" aria-label="訪問状況">
+          <span id="visitedCount">0</span>
+          <small>訪問済み</small>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="map-panel" aria-label="御書印スポット地図">
+          <div class="map-toolbar">
+            <label class="search-field">
+              <span>検索</span>
+              <input id="searchInput" type="search" placeholder="書店名・地域・メモ">
+            </label>
+            <div class="segmented" role="group" aria-label="表示フィルター">
+              <button class="segment active" type="button" data-filter="all">すべて</button>
+              <button class="segment" type="button" data-filter="open">未訪問</button>
+              <button class="segment" type="button" data-filter="visited">訪問済み</button>
+            </div>
+          </div>
+
+          <div class="map-wrap">
+            <div id="map" class="real-map" role="application" aria-label="日本地図と御書印スポット"></div>
+          </div>
+        </section>
+
+        <aside class="side-panel" aria-label="書店情報">
+          <section class="detail" id="detailPanel">
+            <p class="eyebrow">SELECTED SHOP</p>
+            <h2 id="detailName">ピンか一覧から選択</h2>
+            <p id="detailAddress" class="muted">サンプル書店を選ぶと、訪問メモを記録できます。</p>
+            <div class="meta-grid">
+              <div>
+                <span>地域</span>
+                <strong id="detailArea">-</strong>
+              </div>
+              <div>
+                <span>状態</span>
+                <strong id="detailStatus">-</strong>
+              </div>
+            </div>
+            <label class="check-row">
+              <input id="visitedToggle" type="checkbox" disabled>
+              <span>訪問済みにする</span>
+            </label>
+            <label class="note-field">
+              <span>メモ</span>
+              <textarea id="noteInput" rows="4" placeholder="御書印番号、日付、店員さんの案内など" disabled></textarea>
+            </label>
+          </section>
+
+          <section class="list-section">
+            <div class="section-heading">
+              <h2>書店リスト</h2>
+              <span id="resultCount">0件</span>
+            </div>
+            <div class="shop-list" id="shopList"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+      const shops = [
+        { id: "sapporo", name: "北の本棚 札幌店", area: "北海道", address: "北海道札幌市中央区", memo: "サンプル。公式参加店リストに差し替えて使う想定。", lat: 43.0618, lon: 141.3545 },
+        { id: "sendai", name: "杜の都ブックス", area: "宮城", address: "宮城県仙台市青葉区", memo: "旅程メモや御書印番号を残せます。", lat: 38.2682, lon: 140.8694 },
+        { id: "tokyo", name: "中央書房 東京駅前", area: "東京", address: "東京都千代田区", memo: "駅近の立ち寄り候補。", lat: 35.6812, lon: 139.7671 },
+        { id: "nagoya", name: "栞堂 名古屋", area: "愛知", address: "愛知県名古屋市中村区", memo: "東海道ルートの候補。", lat: 35.1709, lon: 136.8815 },
+        { id: "kyoto", name: "古都書林 京都", area: "京都", address: "京都府京都市中京区", memo: "寺社巡りとは別に御書印巡り。", lat: 35.0116, lon: 135.7681 },
+        { id: "osaka", name: "なにわ本舗", area: "大阪", address: "大阪府大阪市北区", memo: "関西遠征の起点。", lat: 34.6937, lon: 135.5023 },
+        { id: "hiroshima", name: "瀬戸内ブックセンター", area: "広島", address: "広島県広島市中区", memo: "中国地方の候補。", lat: 34.3853, lon: 132.4553 },
+        { id: "fukuoka", name: "博多文庫堂", area: "福岡", address: "福岡県福岡市博多区", memo: "九州遠征の候補。", lat: 33.5902, lon: 130.4017 },
+        { id: "naha", name: "島の書斎 那覇", area: "沖縄", address: "沖縄県那覇市", memo: "遠征用のサンプル。", lat: 26.2124, lon: 127.6792 }
+      ];
+
+      let map;
+      let markerLayer;
+
+      const state = {
+        selectedId: shops[2].id,
+        filter: "all",
+        query: "",
+        records: JSON.parse(localStorage.getItem("gosyoinRecords") || "{}")
+      };
+
+      const mapEl = document.querySelector("#map");
+      const shopList = document.querySelector("#shopList");
+      const searchInput = document.querySelector("#searchInput");
+      const visitedToggle = document.querySelector("#visitedToggle");
+      const noteInput = document.querySelector("#noteInput");
+      const detailName = document.querySelector("#detailName");
+      const detailAddress = document.querySelector("#detailAddress");
+      const detailArea = document.querySelector("#detailArea");
+      const detailStatus = document.querySelector("#detailStatus");
+      const visitedCount = document.querySelector("#visitedCount");
+      const resultCount = document.querySelector("#resultCount");
+
+      function recordFor(id) {
+        return state.records[id] || { visited: false, note: "" };
+      }
+
+      function saveRecords() {
+        localStorage.setItem("gosyoinRecords", JSON.stringify(state.records));
+      }
+
+      function isVisible(shop) {
+        const record = recordFor(shop.id);
+        const haystack = `${shop.name} ${shop.area} ${shop.address} ${shop.memo} ${record.note}`.toLowerCase();
+        const matchesQuery = haystack.includes(state.query.toLowerCase());
+        const matchesFilter =
+          state.filter === "all" ||
+          (state.filter === "visited" && record.visited) ||
+          (state.filter === "open" && !record.visited);
+        return matchesQuery && matchesFilter;
+      }
+
+      function selectShop(id) {
+        state.selectedId = id;
+        render();
+        focusShopOnMap(id);
+      }
+
+      function initializeMap() {
+        if (!window.L) {
+          mapEl.textContent = "地図を読み込めませんでした。通信状態を確認してください。";
+          return;
+        }
+
+        map = L.map(mapEl, {
+          zoomControl: true,
+          scrollWheelZoom: true,
+          worldCopyJump: true,
+          maxBounds: [[20, 118], [48, 150]],
+          maxBoundsViscosity: .45
+        });
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        markerLayer = L.layerGroup().addTo(map);
+        map.fitBounds([[24, 122], [46, 146]], { padding: [18, 18] });
+      }
+
+      function markerIcon(shop, index, record) {
+        const classes = [
+          "shop-marker",
+          record.visited ? "visited" : "",
+          shop.id === state.selectedId ? "active" : ""
+        ].filter(Boolean).join(" ");
+
+        return L.divIcon({
+          className: "",
+          html: `<div class="${classes}"><span>${index + 1}</span></div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 34],
+          popupAnchor: [0, -34]
+        });
+      }
+
+      function popupHtml(shop, record) {
+        const status = record.visited ? "訪問済み" : "未訪問";
+        return `<strong>${shop.name}</strong>${shop.area} / ${shop.address}<br>${status}`;
+      }
+
+      function renderMarkers() {
+        if (!markerLayer) return;
+
+        markerLayer.clearLayers();
+        shops.forEach((shop, index) => {
+          if (!isVisible(shop)) return;
+
+          const record = recordFor(shop.id);
+          const marker = L.marker([shop.lat, shop.lon], {
+            icon: markerIcon(shop, index, record),
+            title: shop.name
+          });
+
+          marker.bindPopup(popupHtml(shop, record));
+          marker.on("click", () => selectShop(shop.id));
+          marker.addTo(markerLayer);
+        });
+      }
+
+      function focusShopOnMap(id) {
+        if (!map) return;
+
+        const shop = shops.find((item) => item.id === id);
+        if (!shop || !isVisible(shop)) return;
+        map.setView([shop.lat, shop.lon], Math.max(map.getZoom(), 8), { animate: true });
+      }
+
+      function renderList() {
+        const visibleShops = shops.filter(isVisible);
+        resultCount.textContent = `${visibleShops.length}件`;
+        shopList.innerHTML = "";
+
+        if (visibleShops.length === 0) {
+          const empty = document.createElement("p");
+          empty.className = "muted";
+          empty.textContent = "条件に合う書店がありません。";
+          shopList.appendChild(empty);
+          return;
+        }
+
+        visibleShops.forEach((shop) => {
+          const record = recordFor(shop.id);
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `shop-card ${shop.id === state.selectedId ? "active" : ""}`;
+          button.innerHTML = `
+            <strong>${shop.name}</strong>
+            <span>${shop.area} / ${shop.address}</span>
+            <span class="badge ${record.visited ? "visited" : ""}">${record.visited ? "訪問済み" : "未訪問"}</span>
+          `;
+          button.addEventListener("click", () => selectShop(shop.id));
+          shopList.appendChild(button);
+        });
+      }
+
+      function renderDetail() {
+        const shop = shops.find((item) => item.id === state.selectedId);
+        const visible = shop && isVisible(shop);
+
+        if (!shop || !visible) {
+          detailName.textContent = "ピンか一覧から選択";
+          detailAddress.textContent = "表示中の書店を選ぶと、訪問メモを記録できます。";
+          detailArea.textContent = "-";
+          detailStatus.textContent = "-";
+          visitedToggle.checked = false;
+          visitedToggle.disabled = true;
+          noteInput.value = "";
+          noteInput.disabled = true;
+          return;
+        }
+
+        const record = recordFor(shop.id);
+        detailName.textContent = shop.name;
+        detailAddress.textContent = `${shop.address}。${shop.memo}`;
+        detailArea.textContent = shop.area;
+        detailStatus.textContent = record.visited ? "訪問済み" : "未訪問";
+        visitedToggle.disabled = false;
+        visitedToggle.checked = record.visited;
+        noteInput.disabled = false;
+        noteInput.value = record.note || "";
+      }
+
+      function renderSummary() {
+        visitedCount.textContent = shops.filter((shop) => recordFor(shop.id).visited).length;
+      }
+
+      function render() {
+        renderMarkers();
+        renderList();
+        renderDetail();
+        renderSummary();
+      }
+
+      searchInput.addEventListener("input", (event) => {
+        state.query = event.target.value.trim();
+        render();
+      });
+
+      document.querySelectorAll(".segment").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".segment").forEach((item) => item.classList.remove("active"));
+          button.classList.add("active");
+          state.filter = button.dataset.filter;
+          render();
+        });
+      });
+
+      visitedToggle.addEventListener("change", () => {
+        if (!state.selectedId) return;
+        const current = recordFor(state.selectedId);
+        state.records[state.selectedId] = { ...current, visited: visitedToggle.checked };
+        saveRecords();
+        render();
+      });
+
+      noteInput.addEventListener("input", () => {
+        if (!state.selectedId) return;
+        const current = recordFor(state.selectedId);
+        state.records[state.selectedId] = { ...current, note: noteInput.value };
+        saveRecords();
+        renderSummary();
+      });
+
+      initializeMap();
+      render();
+    </script>
+  </body>
+</html>
