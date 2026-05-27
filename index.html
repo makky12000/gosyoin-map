@@ -37,6 +37,7 @@
 
       button,
       input,
+      select,
       textarea {
         font: inherit;
       }
@@ -128,6 +129,7 @@
       }
 
       .search-field,
+      .filter-field,
       .note-field {
         display: grid;
         gap: 7px;
@@ -142,7 +144,12 @@
         flex: 1 1 auto;
       }
 
+      .filter-field {
+        flex: 0 0 180px;
+      }
+
       .search-field input,
+      .filter-field select,
       .note-field textarea {
         width: 100%;
         border: 1px solid var(--line);
@@ -157,6 +164,11 @@
         padding: 0 14px;
       }
 
+      .filter-field select {
+        height: 44px;
+        padding: 0 36px 0 12px;
+      }
+
       .note-field textarea {
         resize: vertical;
         min-height: 106px;
@@ -164,6 +176,7 @@
       }
 
       .search-field input:focus,
+      .filter-field select:focus,
       .note-field textarea:focus {
         border-color: var(--green);
         box-shadow: 0 0 0 3px rgba(71, 116, 99, .14);
@@ -596,6 +609,12 @@
               <span>検索</span>
               <input id="searchInput" type="search" placeholder="書店名・住所・都道府県">
             </label>
+            <label class="filter-field">
+              <span>都道府県</span>
+              <select id="prefectureFilter" aria-label="都道府県で絞り込み">
+                <option value="all">全国</option>
+              </select>
+            </label>
             <div class="segmented" role="group" aria-label="表示フィルター">
               <button class="segment active" type="button" data-filter="all">すべて</button>
               <button class="segment" type="button" data-filter="open">未訪問</button>
@@ -658,6 +677,7 @@
       const state = {
         selectedId: shops[0]?.id || "",
         filter: "all",
+        prefecture: "all",
         query: "",
         records: JSON.parse(localStorage.getItem("gosyoinRecords") || "{}")
       };
@@ -665,6 +685,7 @@
       const mapEl = document.querySelector("#map");
       const shopList = document.querySelector("#shopList");
       const searchInput = document.querySelector("#searchInput");
+      const prefectureFilter = document.querySelector("#prefectureFilter");
       const visitedToggle = document.querySelector("#visitedToggle");
       const noteInput = document.querySelector("#noteInput");
       const detailName = document.querySelector("#detailName");
@@ -697,11 +718,41 @@
         const record = recordFor(shop.id);
         const haystack = `${shop.number} ${shop.name} ${shop.area} ${shop.city} ${shop.address} ${shop.memo} ${shop.precision} ${record.note}`.toLowerCase();
         const matchesQuery = haystack.includes(state.query.toLowerCase());
+        const matchesPrefecture = state.prefecture === "all" || shop.area === state.prefecture;
         const matchesFilter =
           state.filter === "all" ||
           (state.filter === "visited" && record.visited) ||
           (state.filter === "open" && !record.visited);
-        return matchesQuery && matchesFilter;
+        return matchesQuery && matchesPrefecture && matchesFilter;
+      }
+
+      function populatePrefectureFilter() {
+        const areas = [...new Set(shops.map((shop) => shop.area).filter(Boolean))];
+        areas.forEach((area) => {
+          const option = document.createElement("option");
+          option.value = area;
+          option.textContent = area;
+          prefectureFilter.appendChild(option);
+        });
+      }
+
+      function syncSelectedShop() {
+        if (shops.some((shop) => shop.id === state.selectedId && isVisible(shop))) return;
+        state.selectedId = shops.find(isVisible)?.id || "";
+      }
+
+      function fitVisibleOnMap() {
+        if (!map || !window.L) return;
+
+        const visibleShops = shops.filter(isVisible);
+        if (visibleShops.length === 0) return;
+
+        const bounds = L.latLngBounds(visibleShops.map((shop) => [shop.lat, shop.lon]));
+        map.fitBounds(bounds.pad(0.18), {
+          animate: true,
+          maxZoom: visibleShops.length === 1 ? 12 : 10,
+          padding: [24, 24]
+        });
       }
 
       function selectShop(id) {
@@ -869,6 +920,7 @@
       }
 
       function render() {
+        syncSelectedShop();
         renderMarkers();
         renderList();
         renderDetail();
@@ -878,6 +930,12 @@
       searchInput.addEventListener("input", (event) => {
         state.query = event.target.value.trim();
         render();
+      });
+
+      prefectureFilter.addEventListener("change", (event) => {
+        state.prefecture = event.target.value;
+        render();
+        fitVisibleOnMap();
       });
 
       document.querySelectorAll(".segment").forEach((button) => {
@@ -906,6 +964,7 @@
       });
 
       initializeMap();
+      populatePrefectureFilter();
       renderDataSource();
       render();
     </script>
